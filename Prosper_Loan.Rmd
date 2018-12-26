@@ -1,0 +1,1417 @@
+---
+title: "ANALYSIS OF PROSPER LOAN DATASET USING R"
+date: "November 21, 2018"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+---
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, Packages}
+# Load Packages
+
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(GGally)
+```
+
+
+# Introduction
+
+  Prosper Marketplace is America's first peer-to-peer lending marketplace, with over \$7 billion in funded loans. Borrowers request personal loans on Prosper and investors (individual or institutional) can fund anywhere from \$2,000 to \$35,000 per loan request. Investors can consider borrowers' credit scores, ratings, and histories and the category of the loan. Prosper handles the servicing of the loan and collects and distributes borrower payments and interest back to the loan investors.
+
+  Prosper verifies borrowers' identities and select personal data before funding loans and manages all stages of loan servicing. Prosper's unsecured personal loans are fully amortized over a period of three or five years, with no pre-payment penalties. Prosper generates revenue by collecting a one-time fee on funded loans from borrowers and assessing an annual loan servicing fee to investors.
+
+  The dataset is provided by Udacity as part of Nanodegree program - project work. We will be exploring the dataset using R language. Lets explore the structure of the dataset first.
+ 
+```{r echo=FALSE, warning=FALSE, Load_Data}
+
+# read data file
+df <- read.csv("prosperLoanData.csv",na.strings = c("","NA"))
+
+cat("Dimensions : \n Rows:",dim(df)[1],"\t Columns: ",dim(df)[2])
+
+```
+
+  The dataset has **113937** records and **81** columns. Exploring 81 columns is a tremendous task. We will limit ourselves to 15 or 20 columns as part of our analysis. A little bit information about variables we will be using in our analysis.
+
+* **Term:**	The length of the loan expressed in months.
+* **LoanStatus:**	The current status of the loan.
+    - Cancelled
+    - Chargedoff
+    - Completed
+    - Current
+    - Defaulted
+    - FinalPaymentInProgress
+    - **PastDue:** The PastDue status will be accompanied by a delinquency bucket.
+  
+* **ProsperRating (Alpha):**	The Prosper Rating assigned at the time the listing was created between AA - HR. Applicable for loans originated after July 2009.
+* **ProsperRating (numeric):**	The Prosper Rating assigned at the time the listing was created.Applicable for loans originated after July 2009.
+    - 0 - N/A
+    - 1 - HR
+    - 2 - E
+    - 3 - D
+    - 4 - C
+    - 5 - B
+    - 6 - A
+    - 7 - AA.
+    
+* **ProsperScore:**	A custom risk score built using historical Prosper data. The score ranges from 1-11, with 11 being the best, or lowest risk score. Applicable for loans originated after July 2009.
+* **Occupation:**	The Occupation selected by the Borrower at the time they created the listing.
+* **CreditScoreRangeLower:**	The lower value representing the range of the borrower's credit score as provided by a consumer credit rating agency.
+* **CreditScoreRangeUpper:**	The upper value representing the range of the borrower's credit score as provided by a consumer credit rating agency.
+* **BankcardUtilization:**	The percentage of available revolving credit that is utilized at the time the credit profile was pulled.
+* **AvailableBankcardCredit:**	The total available credit via bank card at the time the credit profile was pulled.
+* **DebtToIncomeRatio:**	The debt to income ratio of the borrower at the time the credit profile was pulled. This value is Null if the debt to income ratio is not available. This value is capped at 10.01 (any debt to income ratio larger than 1000% will be returned as 1001%).
+* **IncomeRange:**	The income range of the borrower at the time the listing was created.
+* **StatedMonthlyIncome:**	The monthly income the borrower stated at the time the listing was created.
+* **ListingCategory:**	The category of the listing that the borrower selected when posting their listing.
+    - 0 - Not Available
+    - 1 - Debt Consolidation
+    - 2 - Home Improvement
+    - 3 - Business
+    - 4 - Personal Loan
+    - 5 - Student Use
+    - 6 - Auto
+    - 7 - Other
+    - 8 - Baby&Adoption
+    - 9 - Boat
+    - 10 - Cosmetic Procedure
+    - 11 - Engagement Ring
+    - 12 - Green Loans
+    - 13 - Household Expenses
+    - 14 - Large Purchases
+    - 15 - Medical/Dental
+    - 16 - Motorcycle
+    - 17 - RV
+    - 18 - Taxes
+    - 19 - Vacation
+    - 20 - Wedding Loans
+  
+* **EmploymentStatus:**	The employment status of the borrower at the time they posted the listing.
+* **BorrowerAPR:**	The Borrower's Annual Percentage Rate (APR) for the loan.
+* **BorrowerRate:**	The Borrower's interest rate for this loan.
+* **EstimatedReturn:**	The estimated return assigned to the listing at the time it was created. Estimated return is the difference between the Estimated Effective Yield and the Estimated Loss Rate. Applicable for loans originated after July 2009.
+* **Investors:**	The number of investors that funded the loan.
+* **LoanOriginalAmount:**	The origination amount of the loan.
+
+# Data Wrangling
+
+Before we begin our analysis we need to make some changes to our dataset. We will first filter our dataset, so that it will have just the columns we need.
+
+```{r echo=FALSE, warning=FALSE, Filter_Df}
+
+# vector of selected columns
+columns <- c('Term','LoanStatus','ProsperRating..Alpha.',
+             'ProsperRating..numeric.','ProsperScore',
+             'Occupation','CreditScoreRangeLower','CreditScoreRangeUpper',
+             'BankcardUtilization','AvailableBankcardCredit',
+             'DebtToIncomeRatio','IncomeRange',
+             'StatedMonthlyIncome','ListingCategory..numeric.',
+             'EmploymentStatus','BorrowerAPR',
+             'BorrowerRate','EstimatedReturn',
+             'Investors','LoanOriginalAmount')
+
+# filter df for selected columns
+df <- df[names(df) %in% columns]
+
+# Structure of dataframe
+str(df)
+
+```
+
+From the structure of the dataset, we can observe
+
+1. *Term* is in months. Term in years will benefit us.
+2. *Listing Category* is in numeric. Listing Category description will convey more information than numeric
+3. *Employment Status & Income Range* are factors with *8 levels*
+4. *Loan Status* is a factor with *12 levels*
+5. *Occupation* is a factor with *67 levels*
+
+We will convert Term from months to years and store it under new column *Term_Yrs* and also the *Listing Category* description will be stored in *ListingCategory..alpha.* column.
+
+```{r echo=FALSE, warning=FALSE, Wrangle_Df}
+
+# Convert Term from months to Years
+cat("Term before change:\n ",head(df$Term))
+df$Term_Yrs <- factor(df$Term/12)
+cat("Term after change:\n ",head(df$Term_Yrs))
+
+# ListingCategory..alpha. has listing category descriptions
+cat("Unique values in Listing Category:\n",unique(df$ListingCategory..numeric.))
+df$ListingCategory..alpha. <- factor(df$ListingCategory..numeric.)
+
+# Set levels
+levels(df$ListingCategory..alpha.) <- c('Not Available', 
+'Debt Consolidation', 'Home Improvement', 'Business', 
+'Personal Loan', 'Student Use', 'Auto', 'Other', 
+'Baby&Adoption', 'Boat', 'Cosmetic Procedure', 'Engagement Ring', 
+'Green Loans', 'Household Expenses', 'Large Purchases', 
+'Medical/Dental', 'Motorcycle', 'RV', 'Taxes', 'Vacation', 'Wedding Loans')
+
+{cat("Variables in data frame:\n ")
+  names(df)}
+
+```
+  
+  We can see that the new columns are now present in our dataset. Let's explore.
+
+# Exploratory Data Analysis
+
+### Term:
+
+```{r echo=FALSE, warning=FALSE, Term}
+
+# Plot Term in years
+qplot(data=df,Term_Yrs,
+      fill=Term_Yrs,
+      xlab = 'Term (In Years)',
+      ylab = 'Number of Loans',
+      main = 'Number of Loans by Term (In Years)')+
+      theme(legend.position='none',plot.title = element_text(hjust = 0.5))
+
+# summary - Term in Years
+{cat('Summary by Term:\n')
+  summary(df$Term_Yrs)}
+
+```
+  
+  This suggests that more people get a loan with a term of 3 years followed by 5 year loans.
+
+### Loan Status:
+
+```{r echo=FALSE, warning=FALSE, LoanStatus}
+
+# Plot Loan Status
+qplot(data=subset(df,!is.na(LoanStatus)),
+      LoanStatus,
+      fill=LoanStatus)+
+  coord_flip()+
+  geom_text(aes(label=..count..,hjust=ifelse(..count..>5000,1.2,-0.25)),
+            stat='count')+
+  scale_y_continuous(breaks=seq(0,57000,5000))+
+  theme(legend.position='none')+
+  ylab('Number of Loans')
+
+```
+
+  The plot is self explanatory. There are more loans that are current/live/running than other loans. About 38000 loans have been completed/closed which presents a good picture. The loans have been payed back successfully without defaulting. The number of loans in Charge-off category is huge. What is Charge-off?
+
+> **Charged-Off**: If your loan becomes more than 120 days past due (you missed the last 5 monthly payments), your loan will be considered "charged-off." This does not mean your loan has been excused or forgiven. You are still obligated to make payments. When a loan is charged off, the entire balance is accelerated, meaning it is collectible in full as of the charge-off date.<br/>-[Prosper](https://prosper.zendesk.com/hc/en-us/articles/210013713-What-does-it-mean-for-a-loan-to-be-charged-off-)
+
+  The high number of Charge-Off loans though paint a not-so-good picture. Let us check how Loan Status is distributed with respect to Term.
+
+### Loan Status By Term:
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, Term_Loan_Facet}
+
+# Plot Term with Loan Status
+qplot(data=subset(df,!is.na(LoanStatus)),
+      Term_Yrs,
+      fill=Term_Yrs)+
+  geom_text(aes(label=..count..,
+                vjust=case_when(..count..==5 ~ 1.5,
+                                ..count..==9 ~ 1.5,
+                                ..count..==157 ~ 1.5,
+                                ..count..==174 ~ 1.5,
+                                ..count..==186 ~ -0.25,
+                                ..count..==1086 ~ -0.25,
+                                ..count..==1450 ~ -0.25,
+                                ..count..==2424 ~ -0.25,
+                                ..count..>180 ~1.5,
+                                TRUE ~ -0.25)),
+            stat='count')+
+       facet_wrap(~LoanStatus,scales='free_y')
+
+```
+
+  Clearly the short term loan(1 year) has a bit better performance, since most of the 1 year loans are completed or in final payment stage. The number of loans that are in delinquency is very less when compared to other term loans.
+  
+### Prosper Rating:
+
+#### What is Prosper Rating?
+
+> **Prosper Rating**: It is a proprietary rating figure provided to prospective borrowers based on the company's estimation of that borrower's "estimated loss rate". According to the company, that figure is "determined by two scores: (1) the credit score, obtained from an official credit reporting agency, and (2) the Prosper Score, figured in-house based on the Prosper population." Prosper Ratings, from lowest-risk to highest-risk, are labeled AA, A, B, C, D, E, and HR ("High Risk")<br/>-[Wiki](https://en.wikipedia.org/wiki/Prosper_Marketplace#Prosper_Ratings)
+
+  Prosper Ratings allow potential investors to easily consider a loan application's level of risk because the rating represents an estimated average annualized loss rate range to the investor.
+
+```{r echo=FALSE, warning=FALSE, ProsperRating }
+
+# convert Factor to Ordered Factor - Prosper Rating
+df$ProsperRating..Alpha. <- ordered(df$ProsperRating..Alpha.,
+                                    levels=levels(df$ProsperRating..Alpha.)[c(7,6,5,4,3,1,2)])
+
+# Plot Prosper Rating
+qplot(data= subset(df,!is.na(ProsperRating..Alpha.)),
+      ProsperRating..Alpha.,
+      fill=ProsperRating..Alpha.,
+      ylab='Number of Loans')+
+  geom_text(aes(label=..count..),
+            stat='count',
+            vjust=1.5)+
+  theme(legend.position='none')
+
+
+```
+
+  There are many loans in the rating category 'C'. But surprisingly, the number of loans under "High Risk" is more than the number of loans under "AA" which is the top category.
+
+### Prosper Score:
+
+> **Prosper Score**:A custom risk score was built using historical Prosper data to assess the risk of Prosper borrower listings. The output to Prosper users is a Prosper score which ranges from 1 to 11, with 11 being the best, or lowest risk, score. The worst, or highest risk, score, is a 1. Prosper uses both the custom score and the credit reporting agency score together to assess the borrower's level of risk and determine estimated loss rates. The loss estimates are based on the historical performance of Prosper loans to borrowers with similar characteristics.<br/>-[Prosper](https://www.prosper.com/plp/general-prosper_score/)
+
+  The Prosper score estimates the probability of a loan going "bad," where "bad" is the probability of going 60+ days past due within the first twelve months from the date of loan origination.
+  
+```{r echo=FALSE, warning=FALSE, ProsperScore}
+
+# Factor Prosper Score
+df$ProsperScore_fact <- factor(df$ProsperScore)
+
+# Plot Prosper Score
+qplot(ProsperScore_fact,data=subset(df,!is.na(ProsperScore_fact)),
+      fill=ProsperScore_fact,ylab='Number of Loans')+
+  theme(legend.position = 'none')
+
+```
+  
+  The number of loans with Score of 4,6 & 8 seem to be higher than the number of loans in other scores. In general, the number of loans with scores 4-8 are more than the loans in other score categories.
+
+### Prosper Rating by Prosper Score
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, ProsperScore_ProsperRating}
+
+# Plot ProsperScore - Prosper Rating
+ggplot(aes(ProsperRating..Alpha.,fill=ProsperRating..Alpha.),
+       data=subset(df,!is.na(ProsperScore_fact)))+
+  geom_bar()+
+  facet_wrap(~ProsperScore_fact,scales='free_y')
+
+```
+  There is a clear pattern that we can see in the above plot. As Prosper Score increases from 1 to 11, the number of higher rated loans increases. There seems to be a positive relationship between Prosper Score and Prosper Rating. Let's check this out using a boxplot.
+
+```{r echo=FALSE, warning=FALSE, ProsperScore_ProsperRating_Box}
+
+# Plot ProsperScore - Prosper Rating - Box
+ggplot(aes(ProsperScore_fact,ProsperRating..numeric.),
+       data=subset(df,!is.na(ProsperScore_fact)))+
+  geom_boxplot(aes(fill=ProsperScore_fact))+
+  theme(legend.position='none')
+
+```
+
+  The evidence is very clear. There is correlation between Prosper Rating & Prosper Score. The relationship is positive. The correlation co-efficient is 0.70 for Pearson's Correlation. The details are below.
+
+```{r echo=FALSE, warning=FALSE, ProsperScore_ProsperRating_Corr}
+
+# Get correlation value
+cor.test(df$ProsperScore,df$ProsperRating..numeric.)
+
+```
+
+### Occupation
+
+  It is the occupation stated by the borrower at the time listing was created.
+
+```{r echo=FALSE, warning=FALSE, fig.width =10, fig.height = 15, Occupation}
+
+# Plot Occupation
+qplot(Occupation,
+      data=subset(df,!is.na(Occupation)))+
+  coord_flip()+
+  theme(axis.text=element_text(size=5))
+
+```
+
+  As we saw earlier, there are 67 types of Occupations found in our dataset. The most common Occupation specified by borrowers is 'Others'. Lets checkout the number of loans for the most common and the least common occupations. To do this, we will calculate the mean, median scores & count and store in a separate dataframe. This will be used for our analysis.
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, Occupation_Top_Bottom}
+
+# dataframe with mean & median scores
+df_score <- df %>%
+  filter(!is.na(ProsperScore)) %>%
+  group_by(Occupation) %>%
+  summarise(mean_score = mean(ProsperScore),
+            median_score = median(ProsperScore),
+            n = n()
+  ) %>%
+  arrange(desc(n))
+
+# display new dataframe
+{cat('Structure of new dataframe:\n')
+  head(df_score)}
+
+# Plot Top 10 Occupation
+p1 = qplot(data=df_score[1:10,],
+           Occupation,n,
+      fill=Occupation,
+      ylab='Number of Loans',
+      xlab='Occupation')+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  geom_text(aes(label=n,
+                hjust=ifelse(n>10000,1.5,-0.25)))+
+  theme(legend.position = 'none')
+
+# Plot Bottom 10 Occupation
+p2 = qplot(data=df_score[58:67,],
+           Occupation,n,
+      fill=Occupation,
+      ylab='Number of Loans',
+      xlab='Occupation')+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  geom_text(aes(label=n,
+                hjust=ifelse(n>60,1.5,-0.25)))+
+  theme(legend.position = 'none')
+
+# Arrange Plot
+grid.arrange(p1,p2,ncol=2)
+
+```
+
+### Prosper Score by Occupation 
+
+  Will Prosper Score vary by occupation. How will the top 10 and bottom 10 Occupations perform in Prosper Score?
+
+```{r echo=FALSE, warning=FALSE, Occupation_ProsperScore}
+
+# Reorder dataframe by Median Score
+df_score <- df_score[order(-df_score$median_score),]
+
+# Plot Top Prosper Score + Occupation
+ggplot(data = df_score[1:10,],
+       aes(Occupation,median_score))+
+  geom_bar(stat='identity',color='green',fill='green',alpha=0.1)+
+  geom_point(aes(Occupation,mean_score))+
+  geom_segment(aes(xend=Occupation,yend=mean_score))+
+  coord_flip()
+
+# Plot Bottom Prosper Score + Occupation
+ggplot(data = df_score[59:68,],
+       aes(Occupation,median_score))+
+  geom_bar(stat='identity',color='green',fill='green',alpha=0.1)+
+  geom_point(aes(Occupation,mean_score))+
+  geom_segment(aes(xend=Occupation,yend=mean_score))+
+  coord_flip()
+
+```
+  
+  The green bar shows the median prosper score while the black dot represents the mean prosper score for the same Occupation. Surprisingly, Students from Technical School have the highest Prosper Score. However the prosper score of Students from College have one of the least scores.
+
+### Credit Score Range
+
+  Credit Score Range is provided as two columns in the dataset.
+  
+  * **Credit Score Range Lower:** The lower limit of the Borrower's Credit Score provided by Consumer Credit Rating Agency.
+  * **Credit Score Range Upper:** The lower limit of the Borrower's Credit Score provided by Consumer Credit Rating Agency.
+  
+  If we check the variable for unique values, we get this
+  
+```{r echo=FALSE, warning=FALSE, CSR_uniq}
+
+# Unique Credit Score values
+
+{cat('Unique values in Lower Range:')
+  unique(df$CreditScoreRangeLower)}
+
+{cat('Unique values in Upper Range:')
+  unique(df$CreditScoreRangeUpper)}
+
+```
+
+  So we will factor it, and plot the range.
+  
+```{r echo=FALSE, warning=FALSE, CSR}
+
+# Factorize CreditScoreRangeLower
+df$CreditScoreRangeLower_fact <- factor(df$CreditScoreRangeLower)
+
+# Plot CreditScoreRangeUpper
+qplot(data=subset(df,!is.na(CreditScoreRangeLower_fact)),
+      CreditScoreRangeLower_fact,
+      xlab='Credit Score Range Lower',
+      ylab='Count')
+
+
+# Factorize CreditScoreRangeUpper
+df$CreditScoreRangeUpper_fact <- factor(df$CreditScoreRangeUpper)
+
+# Plot CreditScoreRangeUpper
+qplot(data=subset(df,!is.na(CreditScoreRangeUpper_fact)),
+      CreditScoreRangeUpper_fact,
+      xlab='Credit Score Range Upper',
+      ylab='Count')
+      
+```
+
+  From the plots, we can see a similarity between the lower and upper scores. The difference between the upper and lower range values seem to be around 20 points. This is an expected outcome. If the lower range value of Credit Score is high, it means that the higher range value of Credit Score will also be high. This is clearly evident from the below plot.
+
+```{r echo=FALSE, warning=FALSE, CSU_CSL}
+
+# Plot CreditScoreRangeUpper + CreditScoreRangeLower
+qplot(data=subset(df,!is.na(CreditScoreRangeLower)&
+                    !is.na(CreditScoreRangeUpper)),
+      CreditScoreRangeLower,CreditScoreRangeUpper)
+
+```
+
+### Prosper Rating by Credit Score Range
+
+```{r echo=FALSE, warning=FALSE, CSR_ProsperRating}
+
+# Plot CreditScoreRangeLower + Prosper Rating
+p1 = qplot(data=subset(df,!is.na(ProsperRating..Alpha.)),
+           ProsperRating..Alpha.,
+           as.numeric(CreditScoreRangeLower_fact),
+           geom='boxplot',
+           ylab='Lower Range')
+
+# Plot CreditScoreRangeLower + Prosper Rating
+p2 = qplot(data=subset(df,!is.na(ProsperRating..Alpha.)),
+           ProsperRating..Alpha.,
+           as.numeric(CreditScoreRangeUpper_fact),
+           geom='boxplot',
+           ylab='Upper Range')
+
+# Arrange Plot
+grid.arrange(p1,p2,ncol=1)
+
+```
+
+  Clearly, with increase in Prosper Rating, there is increase in Credit Score.
+
+### Prosper Score by Credit Score Range
+
+  Since we know that Prosper Rating and Prosper Score are positively correlated, we can expect a similar output as to the previous one. Lets see.
+  
+```{r echo=FALSE, warning=FALSE, CSR_ProsperScore}
+
+# Plot CreditScoreRangeUpper + Prosper Score
+p1 = qplot(data=subset(df,!is.na(ProsperScore)),
+           CreditScoreRangeLower_fact,ProsperScore,
+           geom='boxplot',
+           xlab='Lower Credit Score Range')
+
+# Plot CreditScoreRangeUpper + Prosper Score
+p2 = qplot(data=subset(df,!is.na(ProsperScore)),
+           CreditScoreRangeUpper_fact,ProsperScore,
+           geom='boxplot',
+           xlab='Upper Credit Score Range')
+
+# Arrange Plot
+grid.arrange(p2,p1,ncol=1)
+
+```
+
+  Yes. With increase in Prosper Score, the Credit Score also increases.
+
+### Bank Card Utilization
+
+> **Bank Card Utilization:** Credit card utilization - or just credit utilization, for short - refers to how much of your available credit you use at any given time. The credit utilization ratio is a component used by credit reporting agencies in calculating a borrower's credit score. Lowering the credit utilization ratio can help a borrower to improve their credit score.<br/>[Investopedia](https://www.investopedia.com/terms/c/credit-utilization-rate.asp)
+
+
+```{r echo=FALSE, warning=FALSE, BCU}
+
+# Plot Bank Card Utilization
+qplot(df$BankcardUtilization,binwidth=0.1,xlab='Card Utilization',ylab='Count')+
+  scale_x_continuous(breaks=seq(0,2.5,0.1),
+                     limits=c(0,2.5))
+
+```
+
+  There are more number of borrowers who have higher Card Utilization rate, meaning more borrowers are using their available credit to its limit.
+
+### Card Utilization by Prosper Score
+
+  From its definition, Card Utilization has a negative influence on borrower's credit score and rating. We will plot the mean and median Card Utilization values for each Prosper Score. I would expect a negative relationship.
+  
+```{r echo=FALSE, warning=FALSE, BCU_ProsperScore}
+
+# Plot Bank Card Utilization + Prosper Score
+p <- ggplot(data=subset(df,!is.na(ProsperScore)),
+       aes(ProsperScore,BankcardUtilization))+
+  geom_line(aes(color='mean_color'),stat='summary',fun.y='mean')+
+  geom_line(aes(color='median_color'),stat='summary',fun.y='median')+
+  scale_color_manual(name='Bank Card Utilization',
+                     values=c(mean_color='red',median_color='green'),
+                     labels=c('Mean','Median'))+
+  scale_x_continuous(breaks=0:11)
+
+# Turn-off legend
+p +  theme(legend.position=c(0.8,0.8))
+
+```
+
+  Surely, the relationship is negative. As Prosper Score increases, the Card Utilization rate is decreasing. But we should also consider other hidden factors. The Total Available Credit which forms the base for the Utilization Ratio may be less or more. This could influence the graph.
+
+### Available Credit
+
+> **Available Credit:** Your available credit is the amount you can use for purchases at any given time. It is the difference between your total credit limit and your account balance.<br/>[Lendedu](https://lendedu.com/blog/total-credit-limit-vs-available-credit)
+
+```{r echo=FALSE, warning=FALSE, AvailCredit}
+
+# Summary
+{cat('Summary on Available Credit:\n')
+  summary(df$AvailableBankcardCredit)}
+
+# quantile - 99%
+{cat('Available Credit at 99% percentile:\n')
+  quantile(subset(df,!is.na(AvailableBankcardCredit))$AvailableBankcardCredit,
+         0.99)}
+
+```
+  
+  We can see that there is a huge gap between the maximum credit and third quartile(75%). We can see that 99% of values lie below 89005. We will use this information to filter our data to plot the 99% of Available Credit Values.
+
+```{r echo=FALSE, warning=FALSE, AvailCredit_plot}
+
+# Plot Available Bankcard Credit
+ggplot(data = subset(df,AvailableBankcardCredit<=89005.32),
+      aes(AvailableBankcardCredit))+xlab('Available Credit')+
+  geom_histogram(aes(y=..density..),binwidth=500,
+                 color='black',fill='white')+
+  scale_x_continuous(breaks=seq(0,80000,7000))+
+  geom_density(alpha=0.2,fill='#FF6666')
+
+```
+
+  There are more number of borrowers having lesser Available Credit. From summary we know that the median value is 4100.
+
+### Available Credit by Prosper Score
+
+  What is the relationship between Available Credit and Prosper Score?
+
+```{r echo=FALSE, warning=FALSE, AvailCredit_ProsperScore}
+
+# Plot Available Bankcard Credit + Prosper Score
+p <- ggplot(data = df,
+       aes(ProsperScore,AvailableBankcardCredit))+
+  geom_line(aes(color='mean_color'),stat='summary',fun.y='mean')+
+  geom_line(aes(color='median_color'),stat='summary',fun.y='median')+
+  scale_color_manual(name='Available Credit',
+                     values=c(mean_color='red',median_color='blue'),
+                     labels=c('Mean','Median'))+
+  scale_x_continuous(breaks=0:10)
+
+# Set legend position
+p +  theme(legend.position=c(0.15,0.85))
+
+```
+
+  With increase in Prosper Score, the Available Credit also increases, which means the Utilization Ratio decreases or borrowers with a better Prosper Score tend to Utilize less amount from their Total Credit Limit and hence, their Available Credit Amount will be high.
+
+### Available Credit & Card Utilization by Prosper Score
+
+  We will try plotting the relationship between Available Credit and Card Utilization Ratio along with Prosper Score. Let us see if we can find any relationship.
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, BCU_AC}
+
+# Plot Bank Card Utilization + AvailableBankcardCredit
+
+p <- ggplot(data=subset(df,
+                   BankcardUtilization<=1 & AvailableBankcardCredit<=89005.32),
+      aes(BankcardUtilization,AvailableBankcardCredit,color=ProsperScore_fact))+
+  geom_point(position='jitter',alpha=0.25)+
+  geom_line(stat='summary',fun.y='median',
+            color='red',size=1.5)+
+  guides(color=guide_legend(override.aes=list(alpha=1),title='Prosper Score'))
+
+# set value colors from palette
+p + scale_color_brewer(type='div',palette=7)
+```
+
+  From the plot, we can see that the values are dispersed. We cannot find a clear relationship pattern between them. However, we can see that higher prosper score borrowers have a higher Available Credit in comparison to lower score borrowers. Also lower score borrowers in general have a lower Availale Credit balance. The line shows the median Available Credit for Card Utilization values.
+
+### Debt-To-Income Ratio
+
+> **Debt-To-Income:** The debt-to-income (DTI) ratio is a personal finance measure that compares an individual's debt payment to his or her overall income. The debt-to-income ratio is one way lenders, including mortgage lenders, measure an individual's ability to manage monthly payment and repay debts. DTI is calculated by dividing total recurring monthly debt by gross monthly income, and it is expressed as a percentage. A low debt-to-income (DTI) ratio demonstrates a good balance between debt and income. Conversely, a high DTI can signal that an individual has too much debt for the amount of income he or she has.<br/> -[Investopedia](https://www.investopedia.com/terms/d/dti.asp)
+
+  Summary of DTI in our dataset
+  
+```{r echo=FALSE, warning=FALSE, DTI_Summary}
+
+# Summary Debt-to-Income Ratio
+summary(subset(df,!is.na(DebtToIncomeRatio))$DebtToIncomeRatio)
+
+```
+
+  We will plot the variable.
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, DTI_Plot}
+
+# Plot Debt-to-Income Ratio 0-1
+p1 = qplot(data=subset(df,!is.na(DebtToIncomeRatio)),
+      DebtToIncomeRatio,binwidth=0.01,ylab='Count')+
+  scale_x_continuous(breaks=seq(0,1,0.05),limits = c(0,1))
+
+# Plot Debt-to-Income Ratio 1-10
+p2 = qplot(data=subset(df,!is.na(DebtToIncomeRatio)),
+      DebtToIncomeRatio,binwidth=0.25,ylab='Count')+
+  scale_x_continuous(breaks=seq(1,10,0.5),limits = c(1,10))
+
+# arrange plots
+grid.arrange(p1,p2,ncol=1)
+
+```
+
+  There are less number of borrowers whose DTI is greater than 1. Most of the borrowers have a DTI value below 1 and between 0.14 & 0.32. For our analysis we will concentrate on DTI scores below 1.
+
+### Debt-To-Income by Prosper Score
+
+  We will study the relationship between DTI and Prosper Score. We will calculate the median DTI value for each score and plot them.
+  
+```{r echo=FALSE, warning=FALSE, DTI_ProsperScore}
+
+# Plot dataframe with median DTI for Prosper Scores
+df_dir <- df %>%
+  filter(!is.na(ProsperScore) & !is.na(DebtToIncomeRatio))%>%
+  group_by(ProsperScore) %>%
+  summarise(median_dir = median(DebtToIncomeRatio))
+
+# display new dataframe
+{cat('Median DTI values for Prosper Scores\n')
+  df_dir}
+
+# Plot Debt-to-Income Ratio + Prosper Score
+qplot(data=df_dir,ProsperScore,median_dir,
+      geom='line',ylab='Median Debt-To-Income Ratio')+geom_point()+
+  scale_x_continuous(breaks=1:11)
+
+```
+
+  The median DTI value keeps decreasing as Prosper Score increases. The interesting thing is for the highest score-11, the median DTI is greater than the median DTI of scores 9 & 10
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, DTI_ProsperScore_facet}
+
+# Plot Debt-to-Income Ratio + Prosper Score + Facet
+ggplot(data=subset(df,!is.na(DebtToIncomeRatio) & 
+                     !is.na(ProsperScore_fact)),
+      aes(DebtToIncomeRatio,fill=ProsperScore_fact))+
+  geom_histogram(binwidth=0.01)+
+  scale_x_continuous(breaks=seq(0,1,0.15),limits = c(0,1))+
+  facet_wrap(~ProsperScore_fact,scales='free_y')
+
+```
+
+  The spread of DTI seems to be inversely proprotional to Prosper Score. With lower scores, the DTI values are more spread in the graph. As the score increases, the graph becomes more concentrated with less spead.
+
+### Income Range
+
+  It is the income range of the borrower. The available income ranges are
+
+```{r echo=FALSE, warning=FALSE, IncomeRange_levels}
+
+# Income Ranges in dataset
+{cat('Income Ranges in dataset:\n ',
+      levels(df$IncomeRange))}
+
+```
+
+  Lets plot it out!
+
+```{r echo=FALSE, warning=FALSE, IncomeRange_plot}
+
+# Convert Income Range to Ordered Factor
+df$IncomeRange <- ordered(df$IncomeRange,
+                            levels=levels(df$IncomeRange)[c(1,2,4,5,6,3,8,7)])
+
+# Plot Income Range
+qplot(data=subset(df,!is.na(IncomeRange)),
+      IncomeRange,ylab='Count',
+      fill=IncomeRange)+
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x = element_blank())
+
+```
+
+  Most borrowers are in the income range of \$25,000 to \$75,000. Also the number of borrowers from \$100,000+ category seems to be slightly higher than \$75,000 to \$99,999 category.
+
+### Income Range by Term
+
+```{r echo=FALSE, warning=FALSE, fig.width =10, fig.asp = .62, IncomeRange_Term}
+
+# Plot Income Range + Term in Years
+qplot(data=subset(df,!is.na(IncomeRange)),
+       IncomeRange,fill=Term_Yrs)
+
+```
+
+   We have already seen that more number of loans are with 3 year term. 5 year term loans have the second place. Here, we see the same reflected. There's more 3 year term loans. Looking at how they are distributed, category \$1-\$24,999 has very few 1 year term loan in comparison to other income categories. Also category \$50,000-\$74,999 has more number of 5 year loans in comparison.
+
+### Income Range by Prosper Score
+
+  How is the income range distributed across Prosper Score. Does higher Prosper Score have more people from particular Income group ? Let's find out.
+  
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, IncomeRange_ProsperScore}
+
+# Plot Income Range + Prosper Score
+qplot(data=subset(df,!is.na(IncomeRange) & !is.na(ProsperScore_fact)),
+      IncomeRange,fill=ProsperScore_fact)+
+  facet_wrap(~ProsperScore_fact)+
+  coord_flip()
+
+```
+
+  Yes. We can see that for lower scores, the lower income ranges lead the higher income range, meaning the number of loans with lower prosper score is more for lower income range borrowers. But as score increases, slowly the higher income group takes the lead.
+
+### Debt-To-Income by Income Range
+
+  How about Debt-To-Income ratio and Income Range ? Do lower income range borrowers have higher DTI value ?
+
+```{r echo=FALSE, warning=FALSE, fig.width =10, fig.asp = .62, IncomeRange_DTI}
+
+# Plot Income Range + Debt-to-Income Ratio
+ggplot(data=subset(df,!is.na(IncomeRange)),
+      aes(IncomeRange,DebtToIncomeRatio))+
+  geom_point(position='jitter',alpha=0.05)
+
+```
+
+  The income range of \$1 to \$24,999 seems to have more number of borrowers with DTI value greater than 1. There are more borrowers who have not displayed their income range but have higher DTI values. For higher income ranges, the DTI values are concentrated below the value of 1.
+
+
+### Stated Monthly Income
+  
+  The monthly income stated by the borrower. Nearly 75% of borrowers have a monthly income leass than \$7000. We can also see that the maximum value is around 1 million which seems hard to believe. It could be an outlier or may be an error. We will not go into it now.
+  
+```{r echo=FALSE, warning=FALSE, MonthlyIncome}
+
+# Summary
+{cat('Summary of Stated Monthly Income')
+  summary(df$StatedMonthlyIncome)}
+
+```
+
+ We will plot the variable.
+ 
+```{r echo=FALSE, warning=FALSE, MonthlyIncome_plot}
+
+# Get Top 99%
+#quantile(df$StatedMonthlyIncome,0.99, na.rm=TRUE)
+
+# Plot StatedMonthlyIncome
+qplot(data=subset(df,!is.na(StatedMonthlyIncome) & 
+                    StatedMonthlyIncome <=20833.33),
+      StatedMonthlyIncome,
+      binwidth=500)+
+  scale_x_continuous(breaks=seq(0,20000,2000))
+
+```
+
+  The top 99% of borrowers are below the monthly income of \$20530. Most borrowers seem to have an income range of \$3000 to \$5000.
+
+### Stated Monthly Income by Income Range
+
+  In order to find the relationship, we will create a new dataframe with mean, median and count for Stated Monthly Income grouped over Income Range.
+  
+```{r echo=FALSE, warning=FALSE, IncomeRange_MonthlyIncome}
+
+# Plot StatedMonthlyIncome + Income Range
+df_ir <- df %>%
+  filter(!is.na(IncomeRange)) %>%
+  group_by(IncomeRange) %>%
+  summarise(mean_income = mean(StatedMonthlyIncome),
+            median_income = median(StatedMonthlyIncome),
+            n = n()
+            )
+
+# Sample records - head
+{cat('Structure of new dataframe:\n')
+  head(df_ir)}
+
+# Plot new dataframe
+ggplot(data=df_ir,
+      aes(IncomeRange,mean_income))+
+  geom_point()+
+  geom_bar(aes(IncomeRange,median_income),stat='identity',
+           width=0.1, fill=I('red'))+
+  geom_segment(aes(xend=IncomeRange),yend=0)+
+  coord_flip()+ylab('Mean & Median Income')
+
+```
+
+  We will explore the relationship between income group and stated monthly income. There should high correlation between the variables. The above chart shows that. The red line shows Median Stated Income and the black line show the Mean Stated Income. The Stated Income value increases with Increase in Income Range.
+
+### Listing Category
+
+  The Listing selected by borrower for loan. Specifies the reason for getting loan. There are around 20 categories in listing.
+
+```{r echo=FALSE, warning=FALSE, Listing}
+
+# Plot Listing Category
+qplot(data=subset(df,!is.na(ListingCategory..alpha.)),
+      ListingCategory..alpha.,
+      ylab='Number Of Loans')+
+  coord_flip()
+
+```
+
+  The most popular category is *Debt Consolidation*
+
+### Listing Category by Income Range
+
+```{r echo=FALSE, warning=FALSE, fig.width =15, fig.height = 12, Listing_IncomeRange}
+
+# Plot Listing Category + Income Range
+qplot(data=subset(df,!is.na(ListingCategory..alpha.) &
+                    !is.na(IncomeRange)),
+      ListingCategory..alpha.,
+      fill=IncomeRange)+facet_wrap(~IncomeRange,scales='free_x')+
+  coord_flip()+theme(legend.position='none')
+
+```
+
+  We have plotted the distibution of Listing Category by Income Range. There is a similarity in Listing Category for all incomes except for \$0. In \$0 income group, the most popular vategory is Business followed by Personal Loan
+
+### Employment Status
+
+```{r echo=FALSE, warning=FALSE, Employment}
+
+# Plot Employment Status
+qplot(data= subset(df,!is.na(EmploymentStatus)),
+      EmploymentStatus,
+      fill=EmploymentStatus)+theme(legend.position='none')
+
+```
+
+  Most of the Borrowers are Employed(working multiple jobs) or they are full-time employees.
+
+### Employment Status by Term
+
+  Do people of certain employment prefer a certain term loan?
+  
+```{r echo=FALSE, warning=FALSE, Employment_Year}
+
+# Plot Employment Status + Term
+qplot(data=subset(df,!is.na(EmploymentStatus)),
+      EmploymentStatus,
+      fill=Term_Yrs)
+
+```
+
+  Borrowers with Full-Time employment mostly prefer a loan with 3 year term. 5 year term loans are preferred by borrowers in Employed category.
+  
+### Employment Status by Listing Category
+
+```{r echo=FALSE, warning=FALSE, fig.width=12, fig.asp=0.62, Employment_Listing}
+
+# Plot Employment Status + Listing Category
+qplot(data=subset(df,!is.na(ListingCategory..alpha.) &
+                    !is.na(EmploymentStatus)),
+      ListingCategory..alpha.,
+      fill=EmploymentStatus,ylab='Count')+
+  coord_flip()
+
+```
+  
+  A surprise here is that, borrowers of employment status-employed have taken loans in many categories except Personal loan and Student use.
+  
+### Borrower APR
+
+> **Borrower APR:** Annual Percentage Rate (APR) is the cost of credit as a yearly rate.The APR figures in not just your interest rate, but also some fees associated with your loan over its lifetime. At Prosper, this means the closing fee charged when you first borrow the money. This closing fee is paid out of the loan proceeds when the loan originates.<br/> -[Prosper](https://www.prosper.com/plp/borrower-apr/)
+
+```{r echo=FALSE, warning=FALSE, APR}
+
+# Plot Borrower APR
+qplot(data=df,BorrowerAPR,
+      binwidth=0.01,
+      fill=I('dodgerblue4'),
+      color=I('darkolivegreen4'),ylab='Count')+
+  scale_x_continuous(breaks=seq(0,0.42,0.02),limits=c(0,0.42))
+
+```
+
+  The APR value of 0.36 seems to have the highest count, which is surprising because we see a spiking in dataset.
+
+### Borrower APR by Loan Status
+
+```{r echo=FALSE, warning=FALSE,fig.width=10, fig.asp=0.62, APR_Loan}
+
+# Plot Borrower APR + Loan Status
+qplot(BorrowerAPR,data=df,
+      binwidth=0.01,
+      fill=LoanStatus)+
+  scale_x_continuous(breaks=seq(0,0.42,0.02))+
+  theme(legend.position='top')
+
+```
+
+  We can see that the number of Charged-Off loans are high in the Borrower APR value of 0.36. In fact it is higher than all the other APR values. The number of current loans are high for APR values 0.18 & 0.20.
+
+### Borrower APR by Income Range
+
+  What is the average APR for each income group ?
+  
+```{r echo=FALSE, warning=FALSE, fig.width=10, fig.asp=0.62, APR_Income}
+
+# Plot Borrower APR + Income Range
+qplot(data=df,
+      IncomeRange,BorrowerAPR,
+      geom='boxplot')
+
+```
+
+  The APR value seems to be decreasing with the increasing in income range. But we notice that for "Not Employed" category the APR is high, even higher than other groupings. The income range of \$0 however has a lower APR score. We have previously seen, that for the Income Range of \$0, the popular Listing Category was Business followed by Personal Loan, which was unlike other Categories. This suggests that most borrowers in this Income Range are business men/women . This can also explain the lower interest rate charged for loans.
+
+### Borrower APR by Prosper Score
+
+  How is the Borrower APR rate distributed for Prosper Scores.
+
+```{r echo=FALSE, warning=FALSE, APR_Score}
+
+# Plot Borrower APR + Prosper Score
+ggplot(data=df,
+      aes(ProsperScore,BorrowerAPR))+
+  geom_point(aes(color=ProsperScore),position='jitter',alpha=0.1)+
+  scale_x_continuous(breaks=1:11)
+
+```
+
+  From the plot, there is a clear pattern. With increase in Prosper Score, the Borrower APR decreases. We will also check this out using boxplot.
+
+```{r echo=FALSE, warning=FALSE, APR_Score_Box}
+
+# Plot Borrower APR + Prosper Score + Box
+qplot(data= subset(df,!is.na(ProsperScore_fact)),
+      ProsperScore_fact,BorrowerAPR,
+      geom='boxplot')
+
+```
+
+  Yes. The relationship clear. There is High Negative Correlation between Prosper Score & Borrower APR. The correlation details are below.
+
+```{r echo=FALSE, warning=FALSE, APR_Score_Cor}
+
+# Get correlation value
+cor.test(df$ProsperScore,df$BorrowerAPR)
+
+```
+
+### Borrower APR by Prosper Score & Term
+
+  Now that we see the relationship, we will also add in the variable Term (in years)
+  
+```{r echo=FALSE, warning=FALSE, fig.width=10, fig.asp=0.62, APR_Score_Term}
+
+# Borrower APR + Prosper Score + Term
+ggplot(data=subset(df,!is.na(Term_Yrs) & !is.na(ProsperScore_fact)),
+       aes(ProsperScore_fact,BorrowerAPR))+
+  geom_boxplot(alpha=.05,aes(color=Term_Yrs))+
+  facet_wrap(~Term_Yrs,ncol=2)+
+  guides(color=guide_legend(override.aes=list(alpha=1)))
+
+```
+
+  There are a few things we can notice in this plot. The rate of change or slope of the median Borrower APR values in each Term is different. The slope decreases with increase in Term, meaning the median APR value changes more in 1 year loans than in 5 year loans. Also we see that there are no 1 year loans with Prosper Score 11.
+
+### Borrower Rate
+
+> **Borrower Rate:** Borrower/Interest rate is the amount charged, expressed as a percentage of principal, by a lender to a borrower for the use of assets. The assets borrowed could include cash, consumer goods, and large assets such as a vehicle or building.<br/> -[Investopedia](https://www.investopedia.com/terms/i/interestrate.asp)
+
+#### Borrower Rate vs. Borrower APR:
+    The Interest rate refers to the annual cost of a loan to a borrower and is expressed as a percentage. The interest rate does not include fees charged for the loan. The APR (Annual Percentage Rate) reflects the annual cost of a loan to a borrower including any fees charged to originate the loan.
+
+```{r echo=FALSE, warning=FALSE, BorrowerRate}
+
+# Borrower Rate
+qplot(data=df,
+      BorrowerRate,
+      binwidth=0.01,ylab='Count')+
+  scale_x_continuous(breaks=seq(0,0.36,0.02),limits=c(0,0.36))
+
+```
+
+  We can see a similarity in distribution between Borrower APR and Borrower Rate. There is a spike at 0.32 similar to 0.36 in APR.
+
+### Borrower Rate by Term
+
+```{r echo=FALSE, warning=FALSE, Rate_Term}
+
+# Borrower Rate + Term
+qplot(data=subset(df,!is.na(Term_Yrs)),
+       Term_Yrs,BorrowerRate,
+      color=Term_Yrs,
+      geom='boxplot')
+
+```
+
+  There is increase in Borrower rate with increase in Term. This is surprising! Maybe there are other factors that influence this change, the loan amount, Prosper Score or Prosper Rating, Loan Category..etc
+
+### Borrower Rate by Listing Category
+
+```{r echo=FALSE, warning=FALSE, fig.height=7, fig.width=6, Rate_Listing}
+
+# Borrower Rate + Listing Category
+qplot(data=subset(df,!is.na(ListingCategory..alpha.) &
+                    ListingCategory..alpha.!= 'Not Available'),
+      ListingCategory..alpha.,BorrowerRate,
+      color=ListingCategory..alpha.,
+      geom='boxplot')+theme(legend.position='none')+
+  coord_flip()
+
+```
+
+  There is variation in Interest Rate with change in category. Loans for Cosmetic Procedures have the highest Borrower Rates. Then comes Household Expenses loans.
+
+### Borrower Rate vs Borrower APR
+
+```{r echo=FALSE, warning=FALSE, Rate_APR}
+
+# Borrower Rate + Borrower APR
+qplot(data=df,
+      BorrowerRate,BorrowerAPR)
+
+```
+
+  There is high correlation between Borrower Rate and Borrower APR. This is practical since, Borrower APR is Borrower Rate + other charges. 
+
+### Borrower Rate vs Borrower APR by Term
+
+```{r echo=FALSE, warning=FALSE, fig.width=10, fig.asp=0.62, Rate_APR_Term}
+
+# Borrower Rate + Borrower APR + Term
+ggplot(data=subset(df,!is.na(Term_Yrs)),
+      aes(BorrowerRate,BorrowerAPR,
+      color=Term_Yrs))+
+  geom_point(stat='summary',fun.y='median')+
+  facet_wrap(~Term_Yrs)+
+  geom_smooth(method='lm',color=I('black'))+
+  theme(legend.position = 'top')
+
+```
+
+  We have plotted the relationship between Borrower Rate & Borrower APR for each Loan Term. The black lines are the best fit regression lines. The correlation results are below.
+
+```{r echo=FALSE, warning=FALSE, Rate_APR_Cor}
+
+# Correlation
+cor.test(df$BorrowerAPR,df$BorrowerRate)
+
+```
+
+### Estimated Return
+
+> **Estimated Return:** Estimated Return is the difference between the Estimated Effective Yield and the Estimated Loss Rate. Estimated Effective Yield is equal to the borrower interest rate: (i) minus the servicing fee rate, (ii) minus estimated uncollected interest on charge-offs, (iii) plus estimated collected late fees. The Estimated Loss Rate is the estimated principal loss on charge-offs, and is based on the historical performance of Prosper loans. All estimates are based on the historical performance of Prosper loans for borrowers with similar characteristics. The calculations of Estimated Return, Estimated Effective Yield, and Estimated Loss Rate require significant assumptions about the repayment of loans, and investors should make their own judgments with respect to the accuracy of these assumptions. Actual performance may differ from estimated performance.<br/> [Prosper](https://prosper.zendesk.com/hc/en-us/articles/210013663-What-are-loan-interest-rates-and-estimated-investor-returns)
+
+```{r echo=FALSE, warning=FALSE, Est_Rtn}
+
+# Estimated Return
+qplot(data=df,
+      EstimatedReturn,
+      binwidth=0.01)+
+  scale_x_continuous(breaks=seq(-0.1,0.25,0.02),limits=c(-0.1,0.25))
+
+```
+
+  The estimated returns are negative in some cases. The nominal return is estimated to be around 6-12%.
+
+### Estimated Return by Term
+
+```{r echo=FALSE, warning=FALSE, Rtn_Term}
+
+# Estimated Return + Term
+qplot(data=subset(df,!is.na(Term_Yrs)),
+      Term_Yrs,EstimatedReturn,
+      color=Term_Yrs,
+      geom='boxplot')
+
+```
+
+  We have significant outliers for 3 year loans. They extend in the negative too. At first sight, we notice that the estimated return is less for 1 year term loans. With increase in Term, there is increase in return.
+
+### Estimated Return vs Borrower Rate
+
+  This is an important comparison because, Borrow Rate is the interest charged for the loan which is ultimately paid by the borrower and Estimated Return is the return that the investor can expect from the loan. The estimated return is the return on investment that the investor can expect. If there is a relationship then this could guide Investor decisions on his/her investments. Let's check it out.
+
+```{r echo=FALSE, warning=FALSE, Rtn_Rate}
+
+# Estimated Return + Borrower Rate
+qplot(data=subset(df,!is.na(Term_Yrs)),
+      BorrowerRate,EstimatedReturn)
+
+```
+
+  On seeing the graph, we can notice clear patterns hidden. Straight lines with different slopes on top of one another. What could be the factor that will give us clarity? Lets begin with Loan duration or Term.
+
+#### Estimated Return vs Borrower Rate by Term
+
+```{r echo=FALSE, warning=FALSE, fig.width=12, fig.asp=0.62, Rtn_Rate_Term}
+
+# Estimated Return + Borrower Rate + Term
+qplot(data=subset(df,!is.na(Term_Yrs)),
+      BorrowerRate,EstimatedReturn,
+      color=Term_Yrs)+facet_wrap(~Term_Yrs,ncol=2)
+
+```
+
+  Aahaa! It's clear now that the duration of loan plays a major role in this comparison. The rate of change or slope is different in each case. With increase in Borrow Rate, the estimated return is more in the case of 3 year loans. Explains why there are more number of loans under 3 year loan category. There could be other reasons for sure but this is one of the influencers.
+  
+  Hmm..even now, we can see that in all 3 Loan Terms, there are straight lines of varying slope layered upon one another. We need to dig deeper! We will compute the relationship by further splitting it using Prosper Rating.
+
+#### Estimated Return vs Borrower Rate by Prosper Rating & Term
+
+```{r echo=FALSE, warning=FALSE, fig.width=15, fig.height=15, Rtn_Rate_Rating_Term}
+
+# Estimated Return + Borrower Rate + Term + Prosper Rating
+qplot(data=subset(df,!is.na(Term_Yrs) & !is.na(ProsperRating..Alpha.)),
+      BorrowerRate,EstimatedReturn,
+      color=Term_Yrs)+
+  facet_wrap(~ProsperRating..Alpha.+Term_Yrs)
+
+```
+
+  Whew! The plot has a lot of information to process.
+  
+  * It is very clear that the Estimated Return under "High Risk" score for 3 year loans has multiple return rates. There should be some underlying factor for this clear difference.
+  * 3 year term - loans in general have a higher range .i.e. the difference between minimum and maximum values in each case, will be higher than other Term loans.
+  * We can see that with increase in Rating, the Borrow Rate is less and so is the Return Rate.
+  * We did not find any 1 year or 5 year loans with "High Risk" Prosper Rating
+
+
+### Investors
+
+  After looking at Interest Rate and Estimated Return, we should look into Investors.
+
+```{r echo=FALSE, warning=FALSE, Investors}
+
+# Investors
+qplot(data=subset(df,!is.na(Investors)),
+      Investors,
+      binwidth=10)
+
+```
+
+  The graph is skewed with most of the values to the left, meaning the number of investors for each loan is less than 300 for most cases. We'll look at the summary for this variable.
+
+```{r echo=FALSE, warning=FALSE, Investors_Summary}
+
+{cat('Summary:\n')
+  summary(df$Investors)}
+
+```
+
+  One can see that 75% of loans have number of investors less than 116. Also most number of loans have only 1 investor during the time of listing. We will filter and analyze loans with more than 1 investors, in order to clearly identify the pattern of data distribution.
+
+### Investors by Prosper Score
+
+```{r echo=FALSE, warning=FALSE, Investors_Score}
+
+# Investors + Prosper Score
+ggplot(aes(ProsperScore_fact,Investors),
+       data=subset(df,!is.na(ProsperScore_fact) & Investors!=1))+
+  geom_point(position='jitter',alpha=0.2,color='orange')
+
+```
+  
+  The number of investors are more for borrowers with a high Prosper Score. But for the score of 11, this pattern seems to be broken. This could well be because of less number of loans with a Prosper Score of 11, maybe because the loan amount was less and hence less number of investor will fulfill the requirement or maybe one of various other reasons.
+
+### Investors by Estimated Return
+
+```{r echo=FALSE, warning=FALSE, Investors_Rtn}
+
+# Investors + Estimated Return
+ggplot(data=subset(df,!is.na(Investors) & Investors!=1),
+      aes(Investors,EstimatedReturn))+
+  geom_point(position='jitter',alpha=0.05)
+
+```
+
+  Most of the investors have invested on loans with an estimated return greater than 0. However we can find investments made for loans with negative returns, this could lead to a loss of their investment. The number of investors maxes out in the range of 0.05-0.11 which shows that most of the investors are interested in investing where the returns are 6-12%. With increase in returns, there is a factor of risk involved and hence the number of investors reduce.
+
+### Investors by Prosper Rating and Term
+
+```{r echo=FALSE, warning=FALSE, fig.width=12, fig.asp=0.62, Investors_Rating_Term}
+
+# Investors + Rating + Term
+qplot(data=subset(df,!is.na(Term_Yrs) & !is.na(ProsperRating..Alpha.) &
+                    Investors!=1),
+      Investors,fill=Term_Yrs,binwidth=10)+
+  facet_wrap(~ProsperRating..Alpha.,scales='free')+
+  theme(legend.position='top')
+
+```
+
+  A pattern that is observed here is that, the number of investors increase from <200(rating-HR) to >1000(rating-AA) as Prosper Rating increases.
+
+### Loan Amount
+
+  It is the loan amount loaned to the borrower.
+  
+```{r echo=FALSE, warning=FALSE, Amount}
+
+# Loan Amount
+qplot(data=subset(df,!is.na(LoanOriginalAmount)),
+      LoanOriginalAmount,binwidth=500)+
+  scale_x_continuous(breaks=seq(0,35000,3000))
+
+```
+
+  We can see the irregular spikes in the plot. That's because this is Loan amount and generally people  specify amounts like 10,000 & 15,000 when they apply for loan. That is what is seen here. We have spikes at *4000,10000,15000,20000 & 25000*.
+
+### Loan Amount vs Investors
+
+```{r echo=FALSE, warning=FALSE, fig.width=8, fig.height=12, Amount_Investors}
+
+# Loan Amount + Investors
+p1 = ggplot(data=subset(df,!is.na(LoanOriginalAmount)),
+      aes(LoanOriginalAmount,Investors))+
+  geom_point(position='jitter',alpha=0.2)+
+  scale_x_continuous(breaks=seq(0,36000,3000))
+
+# Loan Amount + Investors + 4x Scope
+p2 = ggplot(data=subset(df,!is.na(LoanOriginalAmount)),
+      aes(LoanOriginalAmount,Investors))+
+  geom_point(position='jitter',alpha=0.2)+
+  scale_x_continuous(breaks=seq(0,10000,500))+
+  coord_cartesian(xlim=c(0,10000))
+
+grid.arrange(p1,p2,ncol=1)
+```
+
+  We will expect the number of investors to increase as Loan Amount increases. That is what we see in the plot. But for Loan Amount less than 10,000 the distribution is not clear. This could be because of the varying amounts requested for loan and also more investors investing in those loans. This can be seen in the second plot, where the plot is zoomed-in for amount < 10000.
+
+### Loan Amount vs Investors by Term
+
+```{r echo=FALSE, warning=FALSE, fig.width=15, fig.asp=0.31, Amount_Investors_Term}
+
+# Loan Amount + Investors + Term
+ggplot(data=subset(df,!is.na(LoanOriginalAmount)),
+      aes(LoanOriginalAmount,Investors))+
+  geom_point(aes(color=Term_Yrs),position='jitter',alpha=0.1)+
+  facet_wrap(~Term_Yrs)
+
+```
+
+  From the plot, we can see that below 10000, there are more loans with a Term of 3 years. It also has more number of investors.
+
+### Loan Amount vs Investors by Term and Prosper Rating
+
+```{r echo=FALSE, warning=FALSE, fig.width=15, fig.height=10, Amount_Investors_Term_Rating}
+
+# Loan Amount + Investors + Prosper Rating
+ggplot(data=subset(df,!is.na(LoanOriginalAmount) & 
+                     !is.na(ProsperRating..Alpha.)),
+       aes(LoanOriginalAmount,Investors))+
+  geom_point(aes(color=Term_Yrs),position='jitter',alpha=0.1)+
+facet_wrap(~ProsperRating..Alpha.)
+
+```
+
+  For "High Risk" loans, both the number of Investors and the loan amount is less. With increasing Prosper Rating, both Loan Amount & the number of Investors increase.
+
+# Final Plots and Summary
+
+------
+
+### Plot One
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = 0.62, Plot_1}
+
+# Plot ProsperScore - Prosper Rating
+ggplot(aes(ProsperRating..Alpha.,fill=ProsperRating..Alpha.),
+       data=subset(df,!is.na(ProsperScore_fact)))+
+  geom_bar()+ xlab('Prosper Rating')+
+  facet_wrap(~ProsperScore_fact,scales='free_y')+
+  guides(fill=guide_legend(title='Prosper Rating'))+
+  ggtitle('Distribution of Prosper Rating for Prosper Score')+
+  theme(plot.title = element_text(hjust = 0.5,size=20))
+
+```
+
+  In this plot, we are examining the relationship between Prosper Score and Prosper Rating. Prosper score estimates the probability of a loan going "bad," where "bad" is the probability of going 60+ days past due within the first twelve months from the date of loan origination. Prosper Score is scored 0(worst) to 11(Best).
+  
+  Prosper Rating is internal rating provided by Prosper which represents an estimated average annualized loss rate range. Rating is categorized from AA(Best) to HR(Worst).
+  
+  From the plot, we can see that with increase in Prosper Score, there is increase in the number of higher rated loans. For score of 1 & 2, most loans are in HR and E categories. For score 3, most loans are in D category. For scores 4 & 5, 'C' category loans are high. From score 6 on, we can see higher rated loans(A,AA) steadily grow and dominate the graph. Although higher rating loans are present in lower prosper scores like 6,7,8 the number of such loans is less in comparison. The Pearsons correlation r=0.705 for Prosper Score and Prosper Rating.
+
+### Plot Two
+
+```{r echo=FALSE, warning=FALSE, fig.width =15, fig.asp = 0.5, Plot_Two}
+
+# Plot Bank Card Utilization + Prosper Score
+p1 <- ggplot(data=subset(df,!is.na(ProsperScore)),
+       aes(ProsperScore,BankcardUtilization))+
+  geom_line(aes(color='mean_color'),stat='summary',fun.y='mean')+
+  geom_line(aes(color='median_color'),stat='summary',fun.y='median')+
+  scale_color_manual(name='Bank Card Utilization',
+                     values=c(mean_color='red',median_color='green'),
+                     labels=c('Mean','Median'))+
+  scale_x_continuous(breaks=0:11)+
+  theme(legend.position=c(0.8,0.8))
+
+# Plot Available Bankcard Credit + Prosper Score
+p2 <- ggplot(data = df,
+       aes(ProsperScore,AvailableBankcardCredit))+
+  geom_line(aes(color='mean_color'),stat='summary',fun.y='mean')+
+  geom_line(aes(color='median_color'),stat='summary',fun.y='median')+
+  scale_color_manual(name='Available Credit',
+                     values=c(mean_color='red',median_color='blue'),
+                     labels=c('Mean','Median'))+
+  scale_x_continuous(breaks=0:10)+
+  theme(legend.position=c(0.15,0.85))
+
+# arange multiple plots
+grid.arrange(p1,p2,nrow=1,
+             top=textGrob("Bank Card Utilization & Available Credit by Prosper Score",
+                          gp=gpar(fontsize=20,font=3)))
+
+```
+
+  Available Credit is the amount that the borrower can use on credit. It is the balance amount in card that the borrower has after he has made some purchases. It is the difference between Total Credit and Credit Balance. Bank Card Utilization is the percent of Total Credit the borrower has utilized.
+  
+  Now, the dataset has details about borrowers at a specific time frame. If a listing is published today, the results may be or may not be the same as the results we have from our dataset. However, in our dataset with more than 113K records, we find this relationship that with increase in Prosper Score, the Bank Card Utilization goes down. The Utilization rate for Score 11 seems to break the trend but still the margin is not huge. At the same time we see that the Available Bank Credit increases with increase in Score. This increase Bank Credit may be due to less Utilization but I'm sure that it is not the only factor. We saw in our analysis, that with increase in Prosper Score there is increase in borrowers from higher income range. There is a possibility that the borrowers increased their Credit Limit which in-turn resulted in reduced Utilization and increased Available Credit. This is just an assumption made to identify the underlying factors of influence
+
+### Plot Three
+
+```{r echo=FALSE, warning=FALSE, fig.width =12, fig.asp = .62, Plot_3}
+
+# plot correlation matrix
+ggcorr(df, label = TRUE, label_size = 3,
+       hjust = 0.8, size = 2.5, color = "black", layout.exp = 2)+
+  ggtitle('Correlation Matrix')+
+  theme(plot.title = element_text(hjust = 0.5, size=20))
+
+```
+
+  I could not end this project without this correlation matrix. This matrix is a storehouse of information and yet all displayed in a single plot. The highest value of correlation is 1 & -1 both found in the matrix.
+  
+  * Borrower Rate(Interest Rate charged for loan) and Borrower APR(Interest Rate + Applicable Charges) have a correlation score of 1
+  * Credit Score Range - Upper and Lower values have a correlation score of 1.
+
+Although the practical significance of these correlation scores are not much once we know the meaning of the variables, statistically proving their relationship is significant. Other than the above relationships, there are a few more that I would like to explore.
+
+  * Prosper Rating and Estimated Return has a correlation of -0.7. This is significant because, this says that with increase in Rating of the loan, the expected return for investor is less. I think we should also consider one more relationship in order to fully grasp this finding. Prosper Rating and Borrower Rate has a correlation of -1. Even Prosper Rating and Borrower APR has correlation score of -1. What does this mean?
+  
+    This means that loans with good rating are charged for less interest from Borrowers and ultimately, when less interest is charged, the return on invesment will also be less. Furthermore, we can see that Estimated Return and Borrower Rate has a correlation of 0.8, meaning increase in Return is directly proportional to interest rate charged. This just supports the findings we just made before.
+
+
+# Reflection
+
+------
+
+  The prospser dataset contains over 113k observations with 81 variables. The first Obstacle faced in analyzing the dataset are - Understanding the variables, terminology and general domain knowledge of financial peer-to-peer lending. Even after that, dertermining which variables to analyze, not drifting too far off any one path of investigation and not pulling in new variables throughout the process was tough.
+
+  However, success was found in many areas. The general analysis revealed areas of interests such as positive correlation between borrowing rate and return rate which brough up many questions concerning investment and loan rating and the perplexity of cause and effect. Also, trends were confirmed and unexpected, unknown relationships were revealed.
+  
+  Addition to this dataset would enhance the validity of this analysis. A time series data for a particular borrower would be more useful in indentifying patterns on usage, borrowing, repayment, defaulting...etc. I was able to find many 'NA' values in the current dataset. If the number of 'Na' were less, this analysis would reveal even more about the dataset.
+
+
+# References
+
+* [Prosper](https://en.wikipedia.org/wiki/Prosper_Marketplace)
+* [Charged-Off](https://prosper.zendesk.com/hc/en-us/articles/210013713-What-does-it-mean-for-a-loan-to-be-charged-off-)
+* [Prosper Rating](https://www.prosper.com/plp/invest/prosper-ratings/)
+* [Prosper Score](https://www.prosper.com/plp/general-prosper_score/)
+* [Card Utilization](https://www.investopedia.com/terms/c/credit-utilization-rate.asp)
+* [Available Credit](https://lendedu.com/blog/total-credit-limit-vs-available-credit)
+* [Debt-To-Income](https://www.investopedia.com/terms/d/dti.asp)
+* [Borrower APR - from Prosper](https://www.prosper.com/plp/borrower-apr/)
+* [Borrower APR - Investopedia](https://www.investopedia.com/terms/a/apr.asp)
+* [Borrower Rate](https://www.investopedia.com/terms/i/interestrate.asp)
+* [Estimated Return](https://prosper.zendesk.com/hc/en-us/articles/210013663-What-are-loan-interest-rates-and-estimated-investor-returns)
+* [Plotting Cheat Sheet](http://zevross.com/blog/2014/08/04/beautiful-plotting-in-r-a-ggplot2-cheatsheet-3/#use-a-non-traditional-font-in-your-title-family)
+
