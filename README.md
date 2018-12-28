@@ -1,4 +1,4 @@
-# DAND-Term-2-Project-2
+# Exploratory-Data-Analysis-Prosper-Loan-data
 Explore and Summarize data. In this project, 'Prosper Loan' dataset is analyzed using R and findings are reported.
 
 ## Project Overview
